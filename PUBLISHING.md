@@ -1,7 +1,10 @@
 # Publishing — Sudarsan S
 
-Publisher ID: **`sudarsans`**
+Publisher ID: **`sudarsans`** ✅ created
 Extension ID will be: **`sudarsans.blame-the-extension`**
+
+> Auth is **Trusted Publishing (GitHub OIDC)** — no Azure DevOps PAT, because creating
+> one now requires an Azure subscription. See "Why there is no PAT step" below.
 
 > Both were checked against the Marketplace API before this file was written:
 > `blame-the-extension` does not exist, and `marketplace.visualstudio.com/publishers/sudarsans`
@@ -66,61 +69,96 @@ Uninstall afterwards if you want: `code --uninstall-extension sudarsans.blame-th
 Keeping the publisher ID lowercase and hyphen-free avoids a class of sign-in and
 URL bugs that people hit with mixed-case IDs.
 
-## 2. Create the access token (once, browser)
+## 2. Create the GitHub repo and push (once)
 
-1. Go to <https://dev.azure.com> → User settings (top right) → **Personal access tokens** → **New Token**.
-2. **Organization: All accessible organizations** ← the default "single org" token fails with a confusing 401.
-3. **Scopes: Custom defined** → scroll to **Marketplace** → tick **Manage**.
-4. Copy the token now; it is shown once.
+`gh` is not installed here. Create the repo at <https://github.com/new>:
 
-## 3. Publish
+- **Name: `blame-the-extension`** ← must match the Trusted Publishing policy in step 3 exactly
+- **Public**
+- **Do not** add a README, .gitignore or licence. The repo must start empty.
+
+Then:
 
 ```bash
-export VSCE_PAT="paste-the-token"        # PowerShell: $env:VSCE_PAT="paste-the-token"
-npx vsce login sudarsans
-npx vsce publish
+git remote add origin https://github.com/sudarsansn12/blame-the-extension.git
+git push -u origin main
 ```
 
-`vsce login` stores the token, so you only paste it once per machine.
+### Why there is no PAT step
 
-Useful variants:
+Publishing used to require an Azure DevOps Personal Access Token. Creating a PAT
+requires an Azure DevOps **organization**, and since 2026 Microsoft requires an
+**Azure subscription** to create one — which is why `dev.azure.com` blocks you with
+"link it to an Azure subscription… we couldn't find any subscriptions".
+
+You do not need one. Visual Studio Marketplace supports **Trusted Publishing**: a
+GitHub Actions workflow proves its identity with OIDC, and the Marketplace trades
+that proof for a publishing credential that expires in 15 minutes. No PAT, no Azure
+subscription, no stored secret. `.github/workflows/publish.yml` is already configured
+for it.
+
+> The Entra ID path (`--azure-credential`) is the other supported option, but it also
+> needs Azure resources. Trusted Publishing is the only subscription-free route.
+
+## 3. Create the Trusted Publishing policy (once, browser)
+
+1. Open the publisher at
+   <https://marketplace.visualstudio.com/manage/publishers/sudarsans>.
+2. Select **Trusted Publishing** → expand **Create**.
+3. Fill in exactly:
+
+   | Field | Value |
+   |---|---|
+   | **Policy name** | `Release workflow` (anything you like) |
+   | **Repository owner** | `sudarsansn12` |
+   | **Repository** | `blame-the-extension` |
+   | **Workflow** | `publish.yml` |
+   | **Environment** | leave empty |
+
+4. Select **Create**.
+
+All five values are case-sensitive and the workflow filename must match
+`.github/workflows/publish.yml` exactly. A mismatch fails at publish time with an
+authorization error, not a helpful message.
+
+## 4. Publish
+
+From the Actions tab, run **Publish** → **Run workflow** (the manual trigger).
+
+Or publish by tag, which is the normal path for releases:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow compiles, runs all three test scripts, then publishes with
+`vsce publish --oidc`. Watch it at
+<https://github.com/sudarsansn12/blame-the-extension/actions>.
+
+Useful local variants (these can also publish, but they still need *some*
+credential, so prefer the workflow):
 
 ```bash
 npx vsce package                 # build the .vsix without uploading
 npx vsce ls                      # exactly which files ship
-npx vsce publish patch           # 0.1.0 -> 0.1.1
-npx vsce publish minor           # 0.1.0 -> 0.2.0
 ```
 
 The listing appears after a short automated review. New publishers sometimes wait
 longer than established ones — that is normal, not a rejection.
 
-## 4. Push to GitHub
+### Releasing without the Marketplace, today
 
-`gh` is not installed here. Install it once:
-
-```bash
-winget install --id GitHub.cli
-gh auth login
-gh repo create blame-the-extension --public --source . --remote origin --push
-```
-
-Or create the repo manually at <https://github.com/new> and then:
+If you want a download link before the policy is set up, attach the built `.vsix` to
+a GitHub Release:
 
 ```bash
-git remote add origin https://github.com/<your-username>/blame-the-extension.git
-git push -u origin main
+npx vsce package
+# then: github.com/sudarsansn12/blame-the-extension/releases/new -> upload the .vsix
 ```
 
-**If your GitHub username is not `Sudarsan-S`**, update these two fields in
-`package.json` before publishing:
-
-```json
-"repository": { "type": "git", "url": "https://github.com/<you>/blame-the-extension" },
-"bugs": { "url": "https://github.com/<you>/blame-the-extension/issues" }
-```
-
-Otherwise the "Repository" link on your Marketplace page is a 404.
+Users install it with `code --install-extension blame-the-extension-0.1.0.vsix`.
+This works for every VS Code fork including VSCodium and Cursor.
 
 ## 5. Verified publisher badge
 

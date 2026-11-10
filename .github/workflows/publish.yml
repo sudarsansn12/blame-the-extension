@@ -1,5 +1,17 @@
 name: Publish
 
+# Publishes to the VS Code Marketplace with Trusted Publishing (GitHub OIDC).
+# No PAT, no Azure DevOps organization and no Azure subscription required.
+#
+# Prerequisite, once, in the browser:
+#   marketplace.visualstudio.com/manage -> publisher "sudarsans" -> Trusted Publishing -> Create
+#     Repository owner: sudarsansn12
+#     Repository:       blame-the-extension
+#     Workflow:         publish.yml
+#     Environment:      (leave empty)
+#
+# Trigger: push a v* tag, or run this workflow manually from the Actions tab.
+
 on:
   push:
     tags:
@@ -9,17 +21,23 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required: lets the job request the GitHub OIDC token that the Marketplace
+      # exchanges for a 15-minute publishing credential.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
       - run: npm ci
       - run: npm run compile
       - run: node scripts/test-attribution.js
       - run: node scripts/test-logic.js
       - run: node scripts/test-webview.js
       - name: Publish to the VS Code Marketplace
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx @vscode/vsce publish --no-dependencies
+        # --oidc exchanges the GitHub identity for a short-lived Marketplace
+        # credential. Each OIDC token can be exchanged exactly once, so this must
+        # be a single publish invocation.
+        run: npx --yes @vscode/vsce@latest publish --oidc

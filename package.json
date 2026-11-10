@@ -146,10 +146,25 @@
         },
         "blameTheExtension.hud.updateMs": {
           "type": "number",
-          "default": 500,
+          "default": 1000,
           "minimum": 200,
           "maximum": 5000,
-          "description": "How often the live HUD refreshes, in milliseconds."
+          "description": "How often the live HUD refreshes, in milliseconds. Lower is more responsive but more distracting."
+        },
+        "blameTheExtension.hud.style": {
+          "type": "string",
+          "enum": [
+            "number",
+            "meter",
+            "minimal"
+          ],
+          "enumDescriptions": [
+            "012ms plus a 10-cell sparkline",
+            "Three-cell bar only, no digits",
+            "Just a coloured pulse icon; hover for numbers"
+          ],
+          "default": "number",
+          "description": "How much the live HUD renders. Every style is fixed-width, so the status bar never shifts."
         }
       }
     }

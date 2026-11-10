@@ -19,10 +19,13 @@ import * as vscode from "vscode";
 const LAG_INTERVAL_MS = 100;
 const SPARK_CHARS = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
 const SPARK_POINTS = 10;
+const METER_POINTS = 3;
 const WARN_LAG = 40;
 const BAD_LAG = 100;
 const WARN_CPU = 55;
 const BAD_CPU = 80;
+
+type HudStyle = "number" | "meter" | "minimal";
 
 function sparkline(values: number[]): string {
   if (values.length === 0) {
@@ -66,7 +69,9 @@ export class Hud implements vscode.Disposable {
       return;
     }
     this.lagSamples = [];
-    this.sparkValues = [];
+    // Pre-fill so the item never changes width while warming up. This was the
+    // cause of the status bar "jiggling" on start.
+    this.sparkValues = new Array<number>(SPARK_POINTS).fill(0);
     this.stutters = 0;
     this.maxLag = 0;
     this.startedAt = Date.now();
@@ -114,8 +119,15 @@ export class Hud implements vscode.Disposable {
   private updateMs(): number {
     const value = vscode.workspace
       .getConfiguration("blameTheExtension")
-      .get<number>("hud.updateMs", 500);
+      .get<number>("hud.updateMs", 1000);
     return Math.max(200, Math.min(5000, value));
+  }
+
+  private style(): HudStyle {
+    const value = vscode.workspace
+      .getConfiguration("blameTheExtension")
+      .get<string>("hud.style", "number");
+    return value === "meter" || value === "minimal" ? value : "number";
   }
 
   private sampleLag(): void {
@@ -167,7 +179,10 @@ export class Hud implements vscode.Disposable {
       this.sparkValues.shift();
     }
 
-    this.item.text = `$(pulse) ${Math.round(lagNow)}ms ${sparkline(this.sparkValues)}`;
+    const text = this.composeText(lagNow);
+    if (text !== this.item.text) {
+      this.item.text = text;
+    }
     this.item.tooltip = this.tooltip(lagNow);
     this.item.backgroundColor =
       lagNow > BAD_LAG || this.cpu > BAD_CPU
@@ -175,6 +190,23 @@ export class Hud implements vscode.Disposable {
         : lagNow > WARN_LAG || this.cpu > WARN_CPU
           ? new vscode.ThemeColor("statusBarItem.warningBackground")
           : undefined;
+  }
+
+  /**
+   * Constant-width by construction: every style keeps the same character count
+   * no matter the reading, so the status bar never reflows.
+   */
+  private composeText(lagNow: number): string {
+    const style = this.style();
+    if (style === "minimal") {
+      return "$(pulse)";
+    }
+    if (style === "meter") {
+      return `$(pulse) ${sparkline(this.sparkValues.slice(-METER_POINTS))}`;
+    }
+    // Zero-padded to 3 digits so "8" and "120" occupy the same width.
+    const value = String(Math.min(999, Math.round(lagNow))).padStart(3, "0");
+    return `$(pulse) ${value}ms ${sparkline(this.sparkValues)}`;
   }
 
   private tooltip(lagNow: number): vscode.MarkdownString {

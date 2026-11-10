@@ -147,6 +147,33 @@ npx vsce ls                      # exactly which files ship
 The listing appears after a short automated review. New publishers sometimes wait
 longer than established ones — that is normal, not a rejection.
 
+### Subsequent releases
+
+```bash
+# 1. bump the version and write the changelog entry
+npm pkg set version=0.1.1
+
+# 2. commit and tag — the tag publishes
+git add -A && git commit -m "0.1.1"
+git tag v0.1.1 && git push origin main --tags
+```
+
+Never reuse a tag or a version number. If a publish run fails, fix it and re-run the
+workflow from the Actions tab (`workflow_dispatch`) rather than deleting the tag.
+
+### New listings show up late
+
+Publishing succeeds immediately, but the Marketplace holds a first-time listing until
+its automated validation finishes. During that window:
+
+- `npx vsce show sudarsans.blame-the-extension` already works,
+- the `.vsix` already downloads from the gallery API,
+- but `marketplace.visualstudio.com/items?itemName=...` returns 404 and
+  `code --install-extension sudarsans.blame-the-extension` says "not found".
+
+Both start working once validation clears, usually minutes to a few hours. Nothing is
+wrong and there is nothing to fix — do not re-publish to "kick" it.
+
 ### Releasing without the Marketplace, today
 
 If you want a download link before the policy is set up, attach the built `.vsix` to

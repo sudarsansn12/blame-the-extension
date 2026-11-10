@@ -2,7 +2,7 @@
   "name": "blame-the-extension",
   "displayName": "Blame the Extension",
   "description": "Find the extension that is slowing down your VS Code. Ranks every installed extension by real CPU cost and startup time, then tells you exactly what to disable.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "sudarsans",
   "license": "MIT",
   "engines": {

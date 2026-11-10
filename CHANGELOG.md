@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- Maintenance release. No functional changes; republished from the recreated
+  repository after the publisher moved to Trusted Publishing (GitHub OIDC).
+
 ## 0.1.0
 
 - Live CPU attribution per extension via the Node inspector.

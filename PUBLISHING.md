@@ -159,7 +159,20 @@ git tag v0.1.1 && git push origin main --tags
 ```
 
 Never reuse a tag or a version number. If a publish run fails, fix it and re-run the
-workflow from the Actions tab (`workflow_dispatch`) rather than deleting the tag.
+workflow from the Actions tab (`workflow_dispatch`) rather than deleting the tag — but
+**bump the version first**, or the retry dies on "version already exists".
+
+### If you ever delete and recreate the GitHub repository
+
+The Trusted Publishing policy stores the repository's **numeric ID**, not just its name.
+A recreated repo gets a new ID, so every publish fails with:
+
+```
+401 Unauthorized: The token could not be exchanged for the specified publisher
+```
+
+Fix: Marketplace → publisher → **Trusted Publishing** → delete the old policy →
+**Create** it again with the same owner / repository / workflow. Nothing else changes.
 
 ### New listings show up late
 

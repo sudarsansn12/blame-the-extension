@@ -131,6 +131,10 @@ export async function runProfile(includeBuiltins: boolean): Promise<Report> {
   }
   if (raw.totalSamples === 0) {
     warnings.push("The CPU profiler collected no samples. Try a longer sample window.");
+  } else if (raw.totalSamples < 200) {
+    warnings.push(
+      `Only ${raw.totalSamples} CPU samples — the extension host was mostly idle. Keep typing, saving and switching files while profiling for a sharper result.`
+    );
   }
   if ((lag?.p95 ?? 0) > 100) {
     warnings.push(

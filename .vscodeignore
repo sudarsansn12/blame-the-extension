@@ -2,8 +2,12 @@
 .vscode-test/**
 src/**
 scripts/**
+.github/**
 out/**/*.map
 .gitignore
 tsconfig.json
 **/*.ts
 node_modules/**
+PUBLISHING.md
+LAUNCH.md
+*.vsix

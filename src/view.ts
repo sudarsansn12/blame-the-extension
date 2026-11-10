@@ -1,3 +1,4 @@
+import * as os from "os";
 import * as vscode from "vscode";
 import { refreshStartup, runProfile } from "./profiler";
 import { shareLine, toMarkdown } from "./report";
@@ -134,7 +135,10 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
     const target = await vscode.window.showSaveDialog({
       saveLabel: "Export report",
       filters: { JSON: ["json"] },
-      defaultUri: vscode.Uri.file(`extension-profile-${Date.now()}.json`)
+      defaultUri: vscode.Uri.joinPath(
+        vscode.workspace.workspaceFolders?.[0]?.uri ?? vscode.Uri.file(os.homedir()),
+        `extension-profile-${Date.now()}.json`
+      )
     });
     if (!target) {
       return;

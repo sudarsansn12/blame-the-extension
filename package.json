@@ -1,0 +1,151 @@
+{
+  "name": "blame-the-extension",
+  "displayName": "Blame the Extension",
+  "description": "Find the extension that is slowing down your VS Code. Ranks every installed extension by real CPU cost and startup time, then tells you exactly what to disable.",
+  "version": "0.1.0",
+  "publisher": "devreadytools",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#0d1117",
+    "theme": "dark"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "performance",
+    "slow",
+    "profiler",
+    "startup",
+    "cpu",
+    "lag",
+    "diagnostics",
+    "bisect",
+    "extension host",
+    "speed"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sudarsansn12/blame-the-extension"
+  },
+  "bugs": {
+    "url": "https://github.com/sudarsansn12/blame-the-extension/issues"
+  },
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "capabilities": {
+    "virtualWorkspaces": true,
+    "untrustedWorkspaces": {
+      "supported": true
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "blameTheExtension.runProfile",
+        "title": "Run Profile",
+        "category": "Blame the Extension",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "blameTheExtension.scanLogs",
+        "title": "Re-scan Startup Logs",
+        "category": "Blame the Extension",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "blameTheExtension.copyReport",
+        "title": "Copy Report as Markdown",
+        "category": "Blame the Extension"
+      },
+      {
+        "command": "blameTheExtension.exportReport",
+        "title": "Export Report as JSON",
+        "category": "Blame the Extension"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "blameTheExtension",
+          "title": "Blame the Extension",
+          "icon": "media/activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "blameTheExtension": [
+        {
+          "type": "webview",
+          "id": "blameTheExtension.view",
+          "name": "Profiler"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "blameTheExtension.runProfile",
+          "when": "view == blameTheExtension.view",
+          "group": "navigation@1"
+        },
+        {
+          "command": "blameTheExtension.scanLogs",
+          "when": "view == blameTheExtension.view",
+          "group": "navigation@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "blameTheExtension.runProfile"
+        },
+        {
+          "command": "blameTheExtension.scanLogs"
+        },
+        {
+          "command": "blameTheExtension.copyReport",
+          "when": "false"
+        },
+        {
+          "command": "blameTheExtension.exportReport",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Blame the Extension",
+      "properties": {
+        "blameTheExtension.sampleSeconds": {
+          "type": "number",
+          "default": 10,
+          "minimum": 3,
+          "maximum": 60,
+          "description": "How long to sample the extension host CPU. Longer = more accurate. Use VS Code normally while it runs."
+        },
+        "blameTheExtension.showBuiltInExtensions": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include VS Code built-in extensions (vscode.*) in the ranking."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "icon": "node scripts/make-icon.js",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.1",
+    "typescript": "^5.6.3"
+  }
+}

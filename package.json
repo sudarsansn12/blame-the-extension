@@ -3,7 +3,7 @@
   "displayName": "Blame the Extension",
   "description": "Find the extension that is slowing down your VS Code. Ranks every installed extension by real CPU cost and startup time, then tells you exactly what to disable.",
   "version": "0.1.0",
-  "publisher": "devreadytools",
+  "publisher": "sudarsans",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
@@ -30,10 +30,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/sudarsansn12/blame-the-extension"
+    "url": "https://github.com/Sudarsan-S/blame-the-extension"
   },
   "bugs": {
-    "url": "https://github.com/sudarsansn12/blame-the-extension/issues"
+    "url": "https://github.com/Sudarsan-S/blame-the-extension/issues"
   },
   "activationEvents": [],
   "main": "./out/extension.js",
@@ -139,5 +139,8 @@
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^3.2.1",
     "typescript": "^5.6.3"
+  },
+  "author": {
+    "name": "Sudarsan S"
   }
 }

@@ -65,10 +65,13 @@ VS Code ships an Extension Bisect command, but it is a 10-step interactive quest
 ```bash
 npm install
 npm run compile
-npm run icon      # regenerates media/icon.png
+npm run icon                                  # regenerates media/icon.png
+node scripts/test-attribution.js              # URL -> extension mapping
+node scripts/test-webview.js                  # CSP nonce + inline script parse
+npx @vscode/vsce package                      # build the .vsix
 ```
 
-Press `F5` in VS Code to launch an Extension Development Host. Package with `npx @vscode/vsce package`.
+Press `F5` in VS Code to launch an Extension Development Host.
 
 ## License
 

@@ -9,7 +9,7 @@ import { readStartupInfo } from "./logs";
 import type { ExtInfo, LagStats, Report, Row } from "./types";
 
 /** Our own extension id — excluded so the profiler never blames itself. */
-const SELF_ID = "devreadytools.blame-the-extension";
+const SELF_ID = "sudarsans.blame-the-extension";
 
 function listExtensions(): ExtInfo[] {
   return vscode.extensions.all.map((ext) => {

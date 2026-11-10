@@ -6,7 +6,7 @@ import * as vscode from "vscode";
 import { attribute, buildAttribution } from "./attribute";
 import { profileExtensionHost, startLagMonitor, type RawProfile } from "./cpu";
 import { readStartupInfo } from "./logs";
-import type { ExtInfo, LagStats, Report, Row } from "./types";
+import type { ExtInfo, LagStats, Report, Row, TopFunction } from "./types";
 
 /** Our own extension id — excluded so the profiler never blames itself. */
 const SELF_ID = "sudarsans.blame-the-extension";
@@ -27,6 +27,13 @@ function listExtensions(): ExtInfo[] {
       extensionPath: ext.extensionUri.fsPath
     };
   });
+}
+
+/** Last path segment of a script URL, used to label hot functions. */
+function fileBase(url: string): string {
+  const clean = url.split("?")[0];
+  const parts = clean.split(/[\\/]/);
+  return parts[parts.length - 1] || clean;
 }
 
 export async function runProfile(includeBuiltins: boolean): Promise<Report> {
@@ -82,8 +89,11 @@ export async function runProfile(includeBuiltins: boolean): Promise<Report> {
       cpuByExtension.set(id, bucket);
     }
     bucket.samples += entry.samples;
+    const file = fileBase(url);
     for (const [fn, count] of entry.functions) {
-      bucket.functions.set(fn, (bucket.functions.get(fn) ?? 0) + count);
+      // Key on file::function so two extensions' "activate" functions stay distinct.
+      const key = `${file}::${fn}`;
+      bucket.functions.set(key, (bucket.functions.get(key) ?? 0) + count);
     }
   }
 
@@ -98,15 +108,20 @@ export async function runProfile(includeBuiltins: boolean): Promise<Report> {
     const activation = startup.activations.get(ext.id);
     const activationMs = activation?.reportedMs ?? activation?.deltaMs ?? null;
 
-    let topFunction: string | null = null;
-    if (bucket) {
-      let best = 0;
-      for (const [fn, count] of bucket.functions) {
-        if (count > best) {
-          best = count;
-          topFunction = fn;
-        }
-      }
+    let topFunctions: TopFunction[] = [];
+    if (bucket && bucket.samples > 0) {
+      topFunctions = [...bucket.functions.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([key, count]) => {
+          const separator = key.indexOf("::");
+          return {
+            name: separator >= 0 ? key.slice(separator + 2) : key,
+            file: separator >= 0 ? key.slice(0, separator) : "",
+            samples: count,
+            share: count / bucket.samples
+          };
+        });
     }
 
     return {
@@ -118,7 +133,7 @@ export async function runProfile(includeBuiltins: boolean): Promise<Report> {
       activationEvent: activation?.activationEvent ?? null,
       score: 0,
       verdict: "idle",
-      topFunction
+      topFunctions
     };
   });
 

@@ -26,8 +26,9 @@ Blame the Extension answers it in 10 seconds. It samples the extension host's CP
 1. Open the **Blame the Extension** icon in the activity bar.
 2. Press **Run profile**.
 3. Keep using VS Code normally for the sample window (typing, saving, switching files). Idle editors give idle data.
-4. Read the ranking, then open and disable the top suspect.
-5. Re-run to confirm the number dropped.
+4. Read the ranking, then **click any row** to expand the hottest functions inside that extension — that tells you *what* it is doing, not just that it is busy.
+5. Open and disable the top suspect.
+6. Re-run to confirm the number dropped.
 
 > Tip: the shortcut to "is this extension actually the problem?" is to profile, disable the suspect, restart the extension host, and profile again.
 

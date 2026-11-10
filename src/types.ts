@@ -17,6 +17,16 @@ export interface ExtInfo {
   extensionPath: string;
 }
 
+/** A hot function inside an extension. */
+export interface TopFunction {
+  name: string;
+  /** Basename of the file the samples came from. */
+  file: string;
+  samples: number;
+  /** Share of this extension's own samples (0..1). */
+  share: number;
+}
+
 /** One row of the final ranking. */
 export interface Row {
   ext: ExtInfo;
@@ -33,8 +43,8 @@ export interface Row {
   /** 0..100 composite cost score. */
   score: number;
   verdict: "blame" | "watch" | "fine" | "idle";
-  /** Hottest function inside this extension during the sample. */
-  topFunction: string | null;
+  /** Up to five hottest functions inside this extension. */
+  topFunctions: TopFunction[];
 }
 
 export interface LagStats {

@@ -35,7 +35,9 @@
   "bugs": {
     "url": "https://github.com/sudarsansn12/blame-the-extension/issues"
   },
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "capabilities": {
     "virtualWorkspaces": true,
@@ -66,6 +68,12 @@
         "command": "blameTheExtension.exportReport",
         "title": "Export Report as JSON",
         "category": "Blame the Extension"
+      },
+      {
+        "command": "blameTheExtension.toggleHud",
+        "title": "Toggle Live HUD",
+        "category": "Blame the Extension",
+        "icon": "$(dashboard)"
       }
     ],
     "viewsContainers": {
@@ -89,6 +97,11 @@
     "menus": {
       "view/title": [
         {
+          "command": "blameTheExtension.toggleHud",
+          "when": "view == blameTheExtension.view",
+          "group": "navigation@0"
+        },
+        {
           "command": "blameTheExtension.runProfile",
           "when": "view == blameTheExtension.view",
           "group": "navigation@1"
@@ -105,6 +118,9 @@
         },
         {
           "command": "blameTheExtension.scanLogs"
+        },
+        {
+          "command": "blameTheExtension.toggleHud"
         }
       ]
     },
@@ -120,8 +136,20 @@
         },
         "blameTheExtension.showBuiltInExtensions": {
           "type": "boolean",
+          "default": true,
+          "description": "Include VS Code built-in extensions (vscode.*) such as the TypeScript language service. Usually the biggest CPU consumer, so this is on by default."
+        },
+        "blameTheExtension.hud.enabled": {
+          "type": "boolean",
           "default": false,
-          "description": "Include VS Code built-in extensions (vscode.*) in the ranking."
+          "description": "Show the live performance HUD in the status bar. Updates continuously and turns amber/red when the extension host stutters."
+        },
+        "blameTheExtension.hud.updateMs": {
+          "type": "number",
+          "default": 500,
+          "minimum": 200,
+          "maximum": 5000,
+          "description": "How often the live HUD refreshes, in milliseconds."
         }
       }
     }

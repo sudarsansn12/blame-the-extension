@@ -197,15 +197,16 @@ export function getHtml(): string {
   <p class="tagline">Find the extension eating your CPU.</p>
 
   <div class="controls">
-    <button id="run" class="primary">Run profile</button>
+    <button id="hud" class="primary">Start live HUD</button>
+    <button id="run">Run profile</button>
     <button id="scan">Re-scan logs</button>
   </div>
 
-  <div id="status" class="status">No profile yet. Hit "Run profile" and keep using VS Code while it samples.</div>
+  <div id="status" class="status">Start the live HUD to watch lag in the status bar while you work, or run a profile for a ranked list.</div>
 
   <section id="overview" class="overview hidden">
-    <div class="card"><span class="k">CPU in extensions</span><span class="v" id="stat-ext">—</span></div>
-    <div class="card"><span class="k">VS Code core</span><span class="v" id="stat-core">—</span></div>
+    <div class="card"><span class="k">Host busy</span><span class="v" id="stat-busy">—</span></div>
+    <div class="card"><span class="k">In extensions</span><span class="v" id="stat-ext">—</span></div>
     <div class="card"><span class="k">Lag p95</span><span class="v" id="stat-lag">—</span></div>
     <div class="card"><span class="k">Startup</span><span class="v" id="stat-start">—</span></div>
   </section>
@@ -252,6 +253,12 @@ export function getHtml(): string {
 
   function fmtPct(v) { return (v * 100).toFixed(1) + '%'; }
 
+  function fmtCpu(v) {
+    if (!v || v <= 0) { return 'no CPU samples'; }
+    if (v < 0.1) { return '<0.1% CPU'; }
+    return v.toFixed(1) + '% CPU';
+  }
+
   function fmtMs(v) {
     if (v === null || v === undefined) { return '—'; }
     if (v >= 1000) { return (v / 1000).toFixed(2) + 's'; }
@@ -278,9 +285,10 @@ export function getHtml(): string {
     main.appendChild(bar);
 
     var bits = [];
-    bits.push(fmtPct(row.cpuShare) + ' CPU');
+    bits.push(fmtCpu(row.cpuPct));
     if (row.activationMs !== null) { bits.push(fmtMs(row.activationMs) + ' startup'); }
     if (row.eager) { bits.push('eager'); }
+    if (row.ext.isBuiltin) { bits.push('built-in'); }
     if (row.topFunctions && row.topFunctions.length > 0) {
       bits.push('hot: ' + row.topFunctions[0].name);
     }
@@ -333,9 +341,10 @@ export function getHtml(): string {
     }
     $('empty').classList.add('hidden');
 
-    var extCpu = 1 - report.coreShare;
+    var busy = report.hostBusyShare || 0;
+    var extCpu = busy * (1 - report.coreShare);
+    $('stat-busy').textContent = fmtPct(busy);
     $('stat-ext').textContent = fmtPct(extCpu);
-    $('stat-core').textContent = fmtPct(report.coreShare);
     $('stat-lag').textContent = report.lag ? Math.round(report.lag.p95) + 'ms' : '—';
     $('stat-start').textContent = fmtMs(report.startupTotalMs);
     $('overview').classList.remove('hidden');
@@ -362,7 +371,7 @@ export function getHtml(): string {
     $('share-text').textContent =
       'VS Code ' + report.vscodeVersion + ' · ' + report.totalSamples + ' samples over ' +
       Math.round(report.durationMs / 1000) + 's\\n' +
-      'Extension CPU ' + fmtPct(extCpu) + ' · core ' + fmtPct(report.coreShare) +
+      'Host busy ' + fmtPct(busy) + ' · extensions ' + fmtPct(extCpu) +
       (report.lag ? ' · lag p95 ' + Math.round(report.lag.p95) + 'ms' : '') + '\\n' +
       'Top: ' + (rows[0] ? rows[0].ext.id + ' (' + rows[0].score + ')' : 'none');
 
@@ -381,6 +390,7 @@ export function getHtml(): string {
   }
 
   $('run').addEventListener('click', function () { vscode.postMessage({ type: 'run' }); });
+  $('hud').addEventListener('click', function () { vscode.postMessage({ type: 'hud' }); });
   $('scan').addEventListener('click', function () { vscode.postMessage({ type: 'scan' }); });
   $('copy').addEventListener('click', function () { vscode.postMessage({ type: 'copy' }); });
   $('copyShare').addEventListener('click', function () { vscode.postMessage({ type: 'copyShare' }); });
@@ -398,6 +408,9 @@ export function getHtml(): string {
       setStatus('Done. ' + (report.rows.length) + ' extensions ranked.');
     } else if (msg.type === 'running') {
       setRunning(msg.value);
+    } else if (msg.type === 'hudState') {
+      $('hud').textContent = msg.value ? 'Stop live HUD' : 'Start live HUD';
+      $('hud').className = msg.value ? '' : 'primary';
     } else if (msg.type === 'error') {
       setStatus(msg.message, 'error');
     } else if (msg.type === 'info') {

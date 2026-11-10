@@ -12,6 +12,7 @@ export function toMarkdown(report: Report, limit = 15): string {
   lines.push(`- Generated: ${new Date(report.generatedAt).toLocaleString()}`);
   lines.push(`- VS Code ${report.vscodeVersion} · extension host PID ${report.extensionHostPid}`);
   lines.push(`- Sampled ${(report.durationMs / 1000).toFixed(0)}s · ${report.totalSamples.toLocaleString()} CPU samples`);
+  lines.push(`- Host busy: ${(report.hostBusyShare * 100).toFixed(0)}% of the window`);
   lines.push(`- Extension host heap: ${report.heapUsedMb} MB`);
   if (report.lag) {
     lines.push(`- Event-loop lag: p50 ${report.lag.p50}ms · p95 ${report.lag.p95}ms · max ${report.lag.max}ms`);
@@ -24,8 +25,9 @@ export function toMarkdown(report: Report, limit = 15): string {
   lines.push("|---|-----------|-----|---------|-------|");
   rows.forEach((row, index) => {
     const startup = row.activationMs === null ? "—" : `${row.activationMs}ms${row.eager ? " (eager)" : ""}`;
+    const label = row.ext.isBuiltin ? `${row.ext.id} (built-in)` : row.ext.id;
     lines.push(
-      `| ${index + 1} | \`${row.ext.id}\` | ${pct(row.cpuShare)} | ${startup} | ${row.score} |`
+      `| ${index + 1} | \`${label}\` | ${row.cpuPct.toFixed(1)}% | ${startup} | ${row.score} |`
     );
   });
 

@@ -4,10 +4,12 @@ Shipping is 20% of the work. The ranked-list screenshot is the product.
 
 ## Before you press publish
 
-1. **Record the GIF.** Install the `.vsix`, open the sidebar, run a real profile on
-   a machine with 30+ extensions, and capture 5 seconds of the list expanding.
-   Save it as `media/screenshot.png` (Marketplace renders GIFs too — an animated
-   GIF outperforms a static shot 3–5x).
+1. **Record the GIF.** Install the `.vsix`, start the live HUD, and record 8 seconds of
+   the readout spiking **while you type fast**. That is the screenshot no other
+   extension can produce, and it is the entire pitch in one loop. Then a second shot of
+   the ranked list expanding into hot functions.
+   Save as `media/screenshot.gif` (Marketplace renders GIFs — an animated one
+   outperforms a static shot 3–5x).
 2. **Make the first line of the README the hook.** It currently is:
    *"Find the extension that is slowing down your VS Code."* Do not bury it.
 3. **Verify the publisher** (DNS TXT). The badge changes how the listing reads.
@@ -18,23 +20,26 @@ Shipping is 20% of the work. The ranked-list screenshot is the product.
 
 **1. Reddit `r/vscode`** — the single highest-value post. Title format that works:
 
-> I got tired of guessing which extension made VS Code slow, so I built a profiler that blames the right one
+> I built an FPS counter for VS Code, because "my editor feels slow" is not a useful sentence
 
-Body: one paragraph of pain, the GIF, the numbers, a link, and a line asking
-people to paste their own profile in the comments. *Replying to every comment
-with their profile read back to them is what turns a post into 1k installs.*
+Body: one paragraph of pain, the GIF of the HUD spiking **while typing**, the ranked
+list as the payoff, a link, and a line asking people to paste their own stutter count.
+*Replying to every comment with their profile read back to them is what turns a post
+into 1k installs.*
 
 **2. Hacker News `Show HN`** — same day, 3–4 hours later.
 
-> Show HN: Blame the Extension – find which VS Code extension is eating your CPU
+> Show HN: Blame the Extension – an FPS counter and CPU profiler for VS Code
 
 First comment should explain the mechanism honestly: in-process Node inspector,
-samples mapped to extension folders, startup deltas from `exthost.log`. HN
-respects "here is exactly how it works and here is where it is wrong".
+samples mapped to extension folders, startup deltas from `exthost.log`, event-loop
+drift as the "FPS". HN respects "here is exactly how it works and here is where it is wrong".
 
-**3. X/Twitter** — a thread, not a link drop. Hook tweet = the brag line:
+**3. X/Twitter** — a thread, not a link drop. Hook tweet = the live number:
 
-> My VS Code extension host spends 34% of its CPU on one extension. I had no idea which one. So I built this.
+> ⚡ 12ms ▂▃▂▁▂▃▅
+>
+> That's my VS Code, live, in the status bar. When it goes red I know the editor is about to stutter — and one click tells me which extension did it.
 
 **4. The framework Discords** you are already in. No marketing voice — "made this,
 thought it might save you the manual bisect, tell me what it says about your setup".

@@ -32,6 +32,10 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
           this.post({ type: "report", report: this.report });
         }
         this.post({ type: "running", value: this.running });
+        this.post({
+          type: "hudState",
+          value: vscode.workspace.getConfiguration("blameTheExtension").get<boolean>("hud.enabled", false)
+        });
         break;
       case "run":
         await this.runProfile();
@@ -39,6 +43,11 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
       case "scan":
         await this.scanLogs();
         break;
+      case "hud": {
+        const enabled = await vscode.commands.executeCommand<boolean>("blameTheExtension.toggleHud");
+        this.post({ type: "hudState", value: Boolean(enabled) });
+        break;
+      }
       case "copy":
         await this.copyReport();
         break;
@@ -95,10 +104,10 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
       );
       return;
     }
-    const pct = (top.cpuShare * 100).toFixed(1);
+    const pct = top.cpuPct >= 0.1 ? `${top.cpuPct.toFixed(1)}%` : `${(top.cpuShare * 100).toFixed(0)}% of busy time`;
     void vscode.window
       .showInformationMessage(
-        `Top suspect: ${top.ext.id} — ${pct}% of extension-host CPU.`,
+        `Top suspect: ${top.ext.id} — ${pct} CPU during the sample.`,
         "Open extension"
       )
       .then((choice) => {

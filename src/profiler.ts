@@ -98,9 +98,14 @@ export async function runProfile(includeBuiltins: boolean): Promise<Report> {
   }
 
   const totalSamples = Math.max(raw.totalSamples, 1);
+  const hostBusyShare = Math.min(1, raw.totalSamples / durationMs);
 
-  const visible = extensions.filter((ext) => includeBuiltins || !ext.isBuiltin);
-  const hiddenBuiltins = extensions.filter((ext) => !includeBuiltins && ext.isBuiltin).length;
+  const visible = extensions.filter(
+    (ext) => ext.id !== SELF_ID && (includeBuiltins || !ext.isBuiltin)
+  );
+  const hiddenBuiltins = includeBuiltins
+    ? 0
+    : extensions.filter((ext) => ext.id !== SELF_ID && ext.isBuiltin).length;
 
   const rows: Row[] = visible.map((ext) => {
     const bucket = cpuByExtension.get(ext.id);
@@ -127,6 +132,7 @@ export async function runProfile(includeBuiltins: boolean): Promise<Report> {
     return {
       ext,
       cpuShare: samples / totalSamples,
+      cpuPct: (samples / durationMs) * 100,
       cpuMs: samples,
       activationMs,
       eager: activation?.startup ?? false,
@@ -146,9 +152,15 @@ export async function runProfile(includeBuiltins: boolean): Promise<Report> {
   }
   if (raw.totalSamples === 0) {
     warnings.push("The CPU profiler collected no samples. Try a longer sample window.");
-  } else if (raw.totalSamples < 200) {
+  } else if (hostBusyShare < 0.05) {
     warnings.push(
-      `Only ${raw.totalSamples} CPU samples — the extension host was mostly idle. Keep typing, saving and switching files while profiling for a sharper result.`
+      `The extension host was idle (${((hostBusyShare * 100) || 0).toFixed(
+        1
+      )}% busy) — these scores mostly reflect startup, not live cost. Keep typing, saving and switching files during the sample for a real ranking.`
+    );
+  } else if (coreSamples / totalSamples > 0.9) {
+    warnings.push(
+      "Almost all sampled CPU went to VS Code's own code, not your extensions. That is normal on an idle window; do some real work while profiling."
     );
   }
   if ((lag?.p95 ?? 0) > 100) {
@@ -163,6 +175,7 @@ export async function runProfile(includeBuiltins: boolean): Promise<Report> {
     extensionHostPid: raw.pid,
     durationMs,
     totalSamples: raw.totalSamples,
+    hostBusyShare,
     coreShare: coreSamples / totalSamples,
     heapUsedMb: raw.heapUsedMb,
     lag,

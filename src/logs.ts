@@ -24,13 +24,19 @@ export interface LogActivation {
   deltaMs: number | null;
   /** Value from "activationTime: Nms" when VS Code logged it. */
   reportedMs: number | null;
+  /** Epoch milliseconds of the log line, when parseable. */
+  atMs: number | null;
 }
 
 export interface StartupInfo {
   logFile: string | null;
   /** "Extension host with pid N started" -> "Eager extensions activated". */
   startupTotalMs: number | null;
+  /** Time from the host starting to the first extension activation. */
+  bootMs: number | null;
   activations: Map<string, LogActivation>;
+  /** Activations in the order VS Code performed them. */
+  timeline: LogActivation[];
 }
 
 const ACTIVATE_RE =
@@ -113,7 +119,13 @@ function parseTimestamp(line: string): number | null {
  * Returns an empty activation map when nothing usable is found.
  */
 export function readStartupInfo(): StartupInfo {
-  const empty: StartupInfo = { logFile: null, startupTotalMs: null, activations: new Map() };
+  const empty: StartupInfo = {
+    logFile: null,
+    startupTotalMs: null,
+    bootMs: null,
+    activations: new Map(),
+    timeline: []
+  };
 
   for (const file of findLogFiles()) {
     let text: string;
@@ -139,6 +151,8 @@ export function readStartupInfo(): StartupInfo {
     const start = bootIndex >= 0 ? bootIndex : 0;
 
     const activations = new Map<string, LogActivation>();
+    const timeline: LogActivation[] = [];
+    const seen = new Set<string>();
     let bootAt: number | null = null;
     let eagerAt: number | null = null;
     let previousAt: number | null = null;
@@ -175,25 +189,32 @@ export function readStartupInfo(): StartupInfo {
         previousAt = at;
       }
 
-      const existing = activations.get(id);
-      // Keep the most expensive observation for an extension that activated more than once.
-      if (existing && (existing.deltaMs ?? 0) >= (delta ?? 0) && existing.reportedMs !== null) {
-        continue;
-      }
-
-      activations.set(id, {
+      const entry: LogActivation = {
         id,
         startup: match[2] === "true",
         activationEvent: match[3] ?? null,
         deltaMs: delta,
-        reportedMs: reported
-      });
+        reportedMs: reported,
+        atMs: at
+      };
+
+      // Keep the most expensive observation for an extension that activated more than once.
+      const existing = activations.get(id);
+      if (!existing || (delta ?? 0) > (existing.deltaMs ?? 0)) {
+        activations.set(id, entry);
+      }
+      if (!seen.has(id)) {
+        seen.add(id);
+        timeline.push(entry);
+      }
     }
 
     const startupTotalMs =
       bootAt !== null && eagerAt !== null && eagerAt >= bootAt ? eagerAt - bootAt : null;
+    const firstAt = timeline.find((entry) => entry.atMs !== null)?.atMs ?? null;
+    const bootMs = bootAt !== null && firstAt !== null && firstAt >= bootAt ? firstAt - bootAt : null;
 
-    return { logFile: file, startupTotalMs, activations };
+    return { logFile: file, startupTotalMs, bootMs, activations, timeline };
   }
 
   return empty;

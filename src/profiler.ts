@@ -1,32 +1,54 @@
 /**
- * Turns raw signals (CPU samples + startup log) into one ranked report.
+ * Turns raw signals into one ranked report.
+ *
+ * Inputs:
+ *   - CPU samples from the inspector (live) and from the action benchmark
+ *   - startup data from VS Code's extension-host log
+ *   - stutters / background CPU collected continuously by the watchers
+ *   - the previous profile, for the regression banner
  */
 
 import * as vscode from "vscode";
 import { attribute, buildAttribution } from "./attribute";
-import { profileExtensionHost, startLagMonitor, type RawProfile } from "./cpu";
-import { readStartupInfo } from "./logs";
-import type { ExtInfo, LagStats, Report, Row, TopFunction } from "./types";
+import { auditExtensions, type AuditInput } from "./audit";
+import { compareBaseline, type BaselineSnapshot } from "./baseline";
+import {
+  profileExtensionHost,
+  startLagMonitor,
+  startProfiler,
+  type RawProfile,
+  type UrlSample
+} from "./cpu";
+import { measureActions } from "./latency";
+import { readStartupInfo, type StartupInfo } from "./logs";
+import type {
+  BackgroundSession,
+  ExtInfo,
+  LagStats,
+  LatencyReport,
+  Report,
+  Row,
+  SessionSummary,
+  StutterEvent,
+  TimelineSegment,
+  TopFunction
+} from "./types";
 
 /** Our own extension id — excluded so the profiler never blames itself. */
 const SELF_ID = "sudarsans.blame-the-extension";
 
-function listExtensions(): ExtInfo[] {
-  return vscode.extensions.all.map((ext) => {
-    const pkg = ext.packageJSON as { publisher?: string; name?: string; displayName?: string; description?: string; version?: string };
-    const [publisher, name] = ext.id.split(".");
-    return {
-      id: ext.id,
-      publisher: pkg.publisher ?? publisher ?? "unknown",
-      name: pkg.name ?? name ?? ext.id,
-      version: String(pkg.version ?? ""),
-      displayName: pkg.displayName ?? pkg.name ?? ext.id,
-      description: pkg.description ?? "",
-      isBuiltin: Boolean((ext.packageJSON as { isBuiltin?: boolean }).isBuiltin) || ext.id.startsWith("vscode."),
-      isActive: ext.isActive,
-      extensionPath: ext.extensionUri.fsPath
-    };
-  });
+export interface ProfileContext {
+  includeBuiltins: boolean;
+  baseline: BaselineSnapshot | null;
+  stutters: StutterEvent[];
+  background: BackgroundSession[];
+  session: SessionSummary;
+  onPhase?: (message: string) => void;
+}
+
+interface Bucket {
+  samples: number;
+  functions: Map<string, number>;
 }
 
 /** Last path segment of a script URL, used to label hot functions. */
@@ -36,7 +58,120 @@ function fileBase(url: string): string {
   return parts[parts.length - 1] || clean;
 }
 
-export async function runProfile(includeBuiltins: boolean): Promise<Report> {
+function listExtensions(): ExtInfo[] {
+  return vscode.extensions.all.map((ext) => {
+    const pkg = ext.packageJSON as {
+      publisher?: string;
+      name?: string;
+      displayName?: string;
+      description?: string;
+      version?: string;
+      isBuiltin?: boolean;
+    };
+    const [publisher, name] = ext.id.split(".");
+    return {
+      id: ext.id,
+      publisher: pkg.publisher ?? publisher ?? "unknown",
+      name: pkg.name ?? name ?? ext.id,
+      version: String(pkg.version ?? ""),
+      displayName: pkg.displayName ?? pkg.name ?? ext.id,
+      description: pkg.description ?? "",
+      isBuiltin: Boolean(pkg.isBuiltin) || ext.id.startsWith("vscode."),
+      isActive: ext.isActive,
+      extensionPath: ext.extensionUri.fsPath
+    };
+  });
+}
+
+function auditInputs(): AuditInput[] {
+  return vscode.extensions.all.map((ext) => {
+    const pkg = ext.packageJSON as { isBuiltin?: boolean; contributes?: AuditInput["contributes"] };
+    return {
+      id: ext.id,
+      isBuiltin: Boolean(pkg.isBuiltin) || ext.id.startsWith("vscode."),
+      contributes: (pkg.contributes ?? {}) as AuditInput["contributes"]
+    };
+  });
+}
+
+function buildTimeline(startup: StartupInfo, limitMs = 30000): TimelineSegment[] {
+  const segments: TimelineSegment[] = [];
+  let cursor = 0;
+
+  if (startup.bootMs !== null && startup.bootMs > 0) {
+    segments.push({ id: "boot", label: "boot", startMs: 0, durationMs: startup.bootMs, eager: true });
+    cursor = startup.bootMs;
+  }
+
+  for (const entry of startup.timeline) {
+    const durationMs = entry.reportedMs ?? entry.deltaMs ?? 0;
+    if (durationMs <= 0) {
+      continue;
+    }
+    if (cursor > limitMs) {
+      break;
+    }
+    segments.push({
+      id: entry.id,
+      label: entry.id.replace(/^vscode\./, ""),
+      startMs: cursor,
+      durationMs,
+      eager: entry.startup
+    });
+    cursor += durationMs;
+  }
+
+  return segments;
+}
+
+function groupSamples(
+  byUrl: Map<string, UrlSample>,
+  lookup: ReturnType<typeof buildAttribution>
+): { byExtension: Map<string, Bucket>; coreSamples: number } {
+  const byExtension = new Map<string, Bucket>();
+  let coreSamples = 0;
+
+  for (const [url, entry] of byUrl) {
+    const id = attribute(url, lookup);
+    if (id === null || id === SELF_ID) {
+      coreSamples += entry.samples;
+      continue;
+    }
+    let bucket = byExtension.get(id);
+    if (!bucket) {
+      bucket = { samples: 0, functions: new Map() };
+      byExtension.set(id, bucket);
+    }
+    bucket.samples += entry.samples;
+    const file = fileBase(url);
+    for (const [fn, count] of entry.functions) {
+      const key = `${file}::${fn}`;
+      bucket.functions.set(key, (bucket.functions.get(key) ?? 0) + count);
+    }
+  }
+
+  return { byExtension, coreSamples };
+}
+
+function topFunctionsOf(bucket: Bucket | undefined): TopFunction[] {
+  if (!bucket || bucket.samples <= 0) {
+    return [];
+  }
+  return [...bucket.functions.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([key, count]) => {
+      const separator = key.indexOf("::");
+      return {
+        name: separator >= 0 ? key.slice(separator + 2) : key,
+        file: separator >= 0 ? key.slice(0, separator) : "",
+        samples: count,
+        share: count / bucket.samples
+      };
+    });
+}
+
+export async function runProfile(ctx: ProfileContext): Promise<Report> {
   const warnings: string[] = [];
   const seconds = vscode.workspace
     .getConfiguration("blameTheExtension")
@@ -53,6 +188,7 @@ export async function runProfile(includeBuiltins: boolean): Promise<Report> {
     );
   }
 
+  ctx.onPhase?.("Sampling the extension host…");
   const lagMonitor = startLagMonitor(durationMs);
 
   let raw: RawProfile;
@@ -68,82 +204,69 @@ export async function runProfile(includeBuiltins: boolean): Promise<Report> {
   }
 
   const lag: LagStats | null = lagMonitor.stop();
-
-  // Collect CPU samples per extension.
-  const cpuByExtension = new Map<string, { samples: number; functions: Map<string, number> }>();
-  let coreSamples = 0;
-
-  for (const [url, entry] of raw.byUrl) {
-    const id = attribute(url, attribution);
-    if (id === SELF_ID) {
-      coreSamples += entry.samples;
-      continue;
-    }
-    if (id === null) {
-      coreSamples += entry.samples;
-      continue;
-    }
-    let bucket = cpuByExtension.get(id);
-    if (!bucket) {
-      bucket = { samples: 0, functions: new Map() };
-      cpuByExtension.set(id, bucket);
-    }
-    bucket.samples += entry.samples;
-    const file = fileBase(url);
-    for (const [fn, count] of entry.functions) {
-      // Key on file::function so two extensions' "activate" functions stay distinct.
-      const key = `${file}::${fn}`;
-      bucket.functions.set(key, (bucket.functions.get(key) ?? 0) + count);
-    }
-  }
-
   const totalSamples = Math.max(raw.totalSamples, 1);
   const hostBusyShare = Math.min(1, raw.totalSamples / durationMs);
+  const { byExtension, coreSamples } = groupSamples(raw.byUrl, attribution);
+  const coreShare = coreSamples / totalSamples;
 
   const visible = extensions.filter(
-    (ext) => ext.id !== SELF_ID && (includeBuiltins || !ext.isBuiltin)
+    (ext) => ext.id !== SELF_ID && (ctx.includeBuiltins || !ext.isBuiltin)
   );
-  const hiddenBuiltins = includeBuiltins
+  const hiddenBuiltins = ctx.includeBuiltins
     ? 0
     : extensions.filter((ext) => ext.id !== SELF_ID && ext.isBuiltin).length;
 
   const rows: Row[] = visible.map((ext) => {
-    const bucket = cpuByExtension.get(ext.id);
+    const bucket = byExtension.get(ext.id);
     const samples = bucket?.samples ?? 0;
     const activation = startup.activations.get(ext.id);
-    const activationMs = activation?.reportedMs ?? activation?.deltaMs ?? null;
-
-    let topFunctions: TopFunction[] = [];
-    if (bucket && bucket.samples > 0) {
-      topFunctions = [...bucket.functions.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([key, count]) => {
-          const separator = key.indexOf("::");
-          return {
-            name: separator >= 0 ? key.slice(separator + 2) : key,
-            file: separator >= 0 ? key.slice(0, separator) : "",
-            samples: count,
-            share: count / bucket.samples
-          };
-        });
-    }
 
     return {
       ext,
       cpuShare: samples / totalSamples,
       cpuPct: (samples / durationMs) * 100,
       cpuMs: samples,
-      activationMs,
+      activationMs: activation?.reportedMs ?? activation?.deltaMs ?? null,
       eager: activation?.startup ?? false,
       activationEvent: activation?.activationEvent ?? null,
       score: 0,
       verdict: "idle",
-      topFunctions
+      topFunctions: topFunctionsOf(bucket)
     };
   });
 
   rescore(rows);
+
+  // ---- Phase 2: action latency, with its own short profile for attribution ----
+  ctx.onPhase?.("Measuring editor actions…");
+  let latency: LatencyReport | null = null;
+  try {
+    const running = await startProfiler();
+    const measured = await measureActions();
+    const digest = await running.stop();
+    const actionGroups = groupSamples(digest.byUrl, attribution);
+
+    let topId: string | null = null;
+    let topCount = 0;
+    for (const [id, bucket] of actionGroups.byExtension) {
+      if (bucket.samples > topCount) {
+        topCount = bucket.samples;
+        topId = id;
+      }
+    }
+
+    latency = {
+      ...measured,
+      attributed: topCount > 0,
+      topExtension:
+        topId === null ? null : { id: topId, share: topCount / Math.max(1, digest.totalSamples) }
+    };
+  } catch {
+    warnings.push("Action latency could not be measured because the CPU profiler was unavailable.");
+  }
+
+  // ---- Static analysis ----
+  const audit = auditExtensions(auditInputs());
 
   if (hiddenBuiltins > 0) {
     warnings.push(
@@ -154,36 +277,45 @@ export async function runProfile(includeBuiltins: boolean): Promise<Report> {
     warnings.push("The CPU profiler collected no samples. Try a longer sample window.");
   } else if (hostBusyShare < 0.05) {
     warnings.push(
-      `The extension host was idle (${((hostBusyShare * 100) || 0).toFixed(
+      `The extension host was idle (${(hostBusyShare * 100).toFixed(
         1
       )}% busy) — these scores mostly reflect startup, not live cost. Keep typing, saving and switching files during the sample for a real ranking.`
     );
-  } else if (coreSamples / totalSamples > 0.9) {
+  } else if (coreShare > 0.9) {
     warnings.push(
       "Almost all sampled CPU went to VS Code's own code, not your extensions. That is normal on an idle window; do some real work while profiling."
     );
   }
   if ((lag?.p95 ?? 0) > 100) {
-    warnings.push(
-      `Event-loop lag p95 is ${lag?.p95}ms — the extension host is blocking the main thread.`
-    );
+    warnings.push(`Event-loop lag p95 is ${lag?.p95}ms — the extension host is blocking the main thread.`);
   }
 
-  return {
+  const report: Report = {
     generatedAt: new Date().toISOString(),
     vscodeVersion: vscode.version,
     extensionHostPid: raw.pid,
     durationMs,
     totalSamples: raw.totalSamples,
     hostBusyShare,
-    coreShare: coreSamples / totalSamples,
+    coreShare,
     heapUsedMb: raw.heapUsedMb,
     lag,
     startupTotalMs: startup.startupTotalMs,
+    bootMs: startup.bootMs,
+    startupTimeline: buildTimeline(startup),
     logFile: startup.logFile,
     rows,
+    latency,
+    audit,
+    regression: null,
+    stutters: ctx.stutters,
+    background: ctx.background,
+    session: ctx.session,
     warnings
   };
+
+  report.regression = compareBaseline(ctx.baseline, report);
+  return report;
 }
 
 /**
@@ -225,6 +357,8 @@ export function refreshStartup(report: Report): Report {
     ...report,
     rows,
     startupTotalMs: startup.startupTotalMs,
+    bootMs: startup.bootMs,
+    startupTimeline: buildTimeline(startup),
     logFile: startup.logFile
   };
 }

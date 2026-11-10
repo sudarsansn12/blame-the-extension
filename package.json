@@ -74,6 +74,11 @@
         "title": "Toggle Live HUD",
         "category": "Blame the Extension",
         "icon": "$(dashboard)"
+      },
+      {
+        "command": "blameTheExtension.copySession",
+        "title": "Copy Session Report",
+        "category": "Blame the Extension"
       }
     ],
     "viewsContainers": {
@@ -121,6 +126,9 @@
         },
         {
           "command": "blameTheExtension.toggleHud"
+        },
+        {
+          "command": "blameTheExtension.copySession"
         }
       ]
     },

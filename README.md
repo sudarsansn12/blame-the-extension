@@ -19,6 +19,13 @@ Blame the Extension answers it in 10 seconds. It samples the extension host's CP
 - **Startup cost per extension.** Parsed from VS Code's `exthost.log`: which extensions activate eagerly, and how long each one took.
 - **Event-loop lag.** p50 / p95 / max. If p95 is over 100ms, something is blocking the extension host and that's the "sluggish" feeling.
 - **A single 0–100 score** per extension, so you do not have to interpret three numbers.
+- **Action latency.** The number users actually feel: how long format/completion/hover/definition take, and which extension burned CPU while they ran.
+- **Stutter flight recorder.** A 250ms heartbeat logs every freeze over 100ms with the time, the file you were in, and how busy the host was.
+- **Background burn detector.** CPU accumulated only while the window is unfocused, so you can answer "why is my fan loud when I'm not even typing?"
+- **Startup waterfall.** A proportional bar of boot time plus every activation, eager ones highlighted.
+- **Extension audit.** Finds keybinding collisions, duplicate language packs, two extensions claiming one language, conflicting debuggers, and theme hoarding.
+- **Session report card.** Uptime, stutter count, worst freeze, total time blocked — copyable as Markdown.
+- **Baseline & regression.** Every profile is diffed against the previous one, with a better/worse banner at the top.
 - **One-click open** of the offending extension's page so you can disable it.
 - **Copy as Markdown / export as JSON** for bug reports, Slack, or your own records.
 
@@ -40,7 +47,7 @@ Blame the Extension answers it in 10 seconds. It samples the extension host's CP
 ⚡ 12ms ▂▃▂▁▂▃▅
 ```
 
-A status bar item, refreshed every 500ms (`blameTheExtension.hud.updateMs`):
+A status bar item, refreshed every second (`blameTheExtension.hud.updateMs`):
 
 - **Lag** — how late a 100ms timer in the extension host actually fires. This is the
   closest thing to an FPS counter for the editor: 0–15ms is smooth, 40ms is noticeable,
@@ -53,6 +60,15 @@ A status bar item, refreshed every 500ms (`blameTheExtension.hud.updateMs`):
 
 It is off by default and costs you nothing until you start it. Click the readout to jump
 straight to a full ranked profile.
+
+Every style is fixed-width so the status bar never shifts while you type:
+`number` (the readout above), `meter` (three cells, no digits), and `minimal` (a coloured
+pulse icon; hover for the numbers). Set `blameTheExtension.hud.style` if the digits still
+feel distracting.
+
+**Honest limitation:** the HUD measures the *extension host*, which is where extension
+code runs. It catches extension-caused lag, not renderer-side jank (GPU, paint, a huge
+minimap).
 
 ## What the numbers mean
 
@@ -98,6 +114,7 @@ npm install
 npm run compile
 npm run icon                                  # regenerates media/icon.png
 node scripts/test-attribution.js              # URL -> extension mapping
+node scripts/test-logic.js                    # audit heuristics, baseline diff, session card
 node scripts/test-webview.js                  # CSP nonce + inline script parse
 npx @vscode/vsce package                      # build the .vsix
 ```

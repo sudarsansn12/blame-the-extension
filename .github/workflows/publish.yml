@@ -17,6 +17,7 @@ jobs:
       - run: npm ci
       - run: npm run compile
       - run: node scripts/test-attribution.js
+      - run: node scripts/test-logic.js
       - run: node scripts/test-webview.js
       - name: Publish to the VS Code Marketplace
         env:

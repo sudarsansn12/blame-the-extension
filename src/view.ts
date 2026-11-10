@@ -1,9 +1,15 @@
 import * as os from "os";
 import * as vscode from "vscode";
+import { toBaseline, type BaselineSnapshot } from "./baseline";
+import type { BackgroundWatcher } from "./background";
 import { refreshStartup, runProfile } from "./profiler";
+import type { StutterRecorder } from "./recorder";
+import { sessionMarkdown, shareCard } from "./reportcard";
 import { shareLine, toMarkdown } from "./report";
 import type { Report } from "./types";
 import { getHtml } from "./webview";
+
+const BASELINE_KEY = "blameTheExtension.baseline";
 
 export class ProfileViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "blameTheExtension.view";
@@ -12,6 +18,12 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
   private report: Report | undefined;
   private running = false;
 
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    private readonly recorder: StutterRecorder,
+    private readonly background: BackgroundWatcher
+  ) {}
+
   resolveWebviewView(view: vscode.WebviewView): void {
     this.view = view;
     view.webview.options = { enableScripts: true };
@@ -19,6 +31,10 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
     view.webview.onDidReceiveMessage((message: { type: string; id?: string }) => {
       void this.handleMessage(message);
     });
+  }
+
+  get lastReport(): Report | undefined {
+    return this.report;
   }
 
   private post(message: unknown): void {
@@ -54,7 +70,13 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
       case "copyShare":
         if (this.report) {
           await vscode.env.clipboard.writeText(shareLine(this.report));
-          void vscode.window.setStatusBarMessage("Share line copied.", 2500);
+          vscode.window.setStatusBarMessage("Share line copied.", 2500);
+        }
+        break;
+      case "copySession":
+        if (this.report) {
+          await vscode.env.clipboard.writeText(sessionMarkdown(this.report));
+          vscode.window.setStatusBarMessage("Session report copied.", 2500);
         }
         break;
       case "export":
@@ -80,9 +102,31 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
     try {
       const includeBuiltins = vscode.workspace
         .getConfiguration("blameTheExtension")
-        .get<boolean>("showBuiltInExtensions", false);
-      const report = await runProfile(includeBuiltins);
+        .get<boolean>("showBuiltInExtensions", true);
+      const baseline = this.context.globalState.get<BaselineSnapshot>(BASELINE_KEY) ?? null;
+      const summary = this.recorder.summary();
+
+      const report = await runProfile({
+        includeBuiltins,
+        baseline,
+        stutters: this.recorder.snapshot(),
+        background: this.background.snapshot(),
+        session: {
+          startedAt: new Date(summary.startedAt).toISOString(),
+          uptimeSeconds: summary.uptimeSeconds,
+          stutters: summary.stutters,
+          worstLagMs: summary.worstLagMs,
+          lossMs: summary.lossMs,
+          backgroundCpuPct: this.background.averagePct()
+        },
+        onPhase: (message) => this.post({ type: "phase", message })
+      });
+
       this.report = report;
+      await this.context.globalState.update(BASELINE_KEY, toBaseline(report));
+      const top = report.rows.find((row) => row.score > 0);
+      this.recorder.setLastSuspect(top?.ext.id ?? null);
+
       this.post({ type: "report", report });
       this.post({ type: "running", value: false });
       this.announce(report);
@@ -104,12 +148,10 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
       );
       return;
     }
-    const pct = top.cpuPct >= 0.1 ? `${top.cpuPct.toFixed(1)}%` : `${(top.cpuShare * 100).toFixed(0)}% of busy time`;
+    const pct =
+      top.cpuPct >= 0.1 ? `${top.cpuPct.toFixed(1)}%` : `${(top.cpuShare * 100).toFixed(0)}% of busy time`;
     void vscode.window
-      .showInformationMessage(
-        `Top suspect: ${top.ext.id} — ${pct} CPU during the sample.`,
-        "Open extension"
-      )
+      .showInformationMessage(`Top suspect: ${top.ext.id} — ${pct} CPU during the sample.`, "Open extension")
       .then((choice) => {
         if (choice === "Open extension") {
           void openExtension(top.ext.id);
@@ -132,8 +174,19 @@ export class ProfileViewProvider implements vscode.WebviewViewProvider {
       this.post({ type: "info", message: "Nothing to copy yet — run a profile." });
       return;
     }
-    await vscode.env.clipboard.writeText(toMarkdown(this.report));
-    void vscode.window.setStatusBarMessage("Markdown report copied.", 2500);
+    await vscode.env.clipboard.writeText(
+      `${toMarkdown(this.report)}\n\n${sessionMarkdown(this.report)}`
+    );
+    vscode.window.setStatusBarMessage("Markdown report copied.", 2500);
+  }
+
+  async copySession(): Promise<void> {
+    if (!this.report) {
+      this.post({ type: "info", message: "Nothing to copy yet — run a profile." });
+      return;
+    }
+    await vscode.env.clipboard.writeText(sessionMarkdown(this.report));
+    vscode.window.setStatusBarMessage("Session report copied.", 2500);
   }
 
   async exportReport(): Promise<void> {
@@ -165,3 +218,5 @@ export async function openExtension(id: string): Promise<void> {
     await vscode.env.openExternal(vscode.Uri.parse(`vscode:extension/${id}`));
   }
 }
+
+export { shareCard };

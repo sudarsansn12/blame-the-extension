@@ -140,6 +140,7 @@ converts several times better than one without. `LAUNCH.md` assumes you have it.
 
 - [ ] `npm run compile` is clean
 - [ ] `node scripts/test-attribution.js` passes
+- [ ] `node scripts/test-logic.js` passes
 - [ ] `node scripts/test-webview.js` passes
 - [ ] version bumped in `package.json`
 - [ ] `CHANGELOG.md` has an entry for that version

@@ -56,6 +56,83 @@ export interface LagStats {
   samples: number;
 }
 
+/** One slice of the startup waterfall. */
+export interface TimelineSegment {
+  id: string;
+  label: string;
+  startMs: number;
+  durationMs: number;
+  eager: boolean;
+}
+
+/** One benchmarked editor action. */
+export interface ActionLatency {
+  name: string;
+  label: string;
+  /** Median of the successful runs, in ms. */
+  medianMs: number | null;
+  runs: number;
+  ok: boolean;
+  note: string | null;
+}
+
+export interface LatencyReport {
+  actions: ActionLatency[];
+  /** Wall time the whole benchmark took. */
+  durationMs: number;
+  samples: number;
+  /** Extension that burned the most CPU while the actions were running. */
+  topExtension: { id: string; share: number } | null;
+  attributed: boolean;
+}
+
+/** A potential problem found by the extension audit. */
+export interface AuditFinding {
+  title: string;
+  detail: string;
+  extensions: string[];
+  severity: "high" | "medium" | "low";
+}
+
+/** One recorded freeze. */
+export interface StutterEvent {
+  /** Epoch milliseconds. */
+  at: number;
+  lagMs: number;
+  cpuPct: number;
+  file: string | null;
+  /** Last extension identified as the top consumer, when a profile has run. */
+  extension: string | null;
+}
+
+/** CPU burned while the window was in the background. */
+export interface BackgroundSession {
+  start: number;
+  end: number;
+  wallSeconds: number;
+  cpuSeconds: number;
+  avgPct: number;
+}
+
+/** Comparison against the previous profile. */
+export interface Regression {
+  previousAt: string;
+  lagP95: { from: number; to: number };
+  hostBusy: { from: number; to: number };
+  startupMs: { from: number | null; to: number | null };
+  verdict: "better" | "worse" | "same";
+}
+
+export interface SessionSummary {
+  startedAt: string;
+  uptimeSeconds: number;
+  stutters: number;
+  worstLagMs: number;
+  /** Milliseconds the host spent blocked in stutters over the threshold. */
+  lossMs: number;
+  backgroundCpuPct: number | null;
+}
+
 export interface Report {
   generatedAt: string;
   vscodeVersion: string;
@@ -72,7 +149,17 @@ export interface Report {
   lag: LagStats | null;
   /** Total startup time from "Extension host started" to "Eager extensions activated". */
   startupTotalMs: number | null;
+  /** Time from host start to the first extension activation. */
+  bootMs: number | null;
+  /** Ordered startup waterfall. */
+  startupTimeline: TimelineSegment[];
   logFile: string | null;
   rows: Row[];
+  latency: LatencyReport | null;
+  audit: AuditFinding[];
+  regression: Regression | null;
+  stutters: StutterEvent[];
+  background: BackgroundSession[];
+  session: SessionSummary;
   warnings: string[];
 }
